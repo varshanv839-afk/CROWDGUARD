@@ -1,0 +1,453 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Operator or Admin profile stored without email PII in the user directory.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128,
+          "description": "Firebase Authentication user UID."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Operator display name."
+        },
+        "photoURL": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional profile avatar URL."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["operator", "admin"],
+          "description": "RBAC access role assigned to the account."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "inactive"],
+          "description": "Account activation status controlled by administrators."
+        },
+        "lastLoginAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of last authenticated sign-in."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp (registration date)."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": ["uid", "displayName", "photoURL", "role", "status", "lastLoginAt", "createdAt", "updatedAt"]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "Isolated operator PII stored under private subcollection.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "updatedAt"]
+    },
+    "AdminRegistry": {
+      "title": "AdminRegistry",
+      "description": "Server-checked administrator membership registry.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "assignedBy": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "assignedBy", "createdAt"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Immutable user authentication and security operations audit trail.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "userName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "userEmail": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "actionType": {
+          "type": "string",
+          "enum": [
+            "LOGIN",
+            "LOGOUT",
+            "REGISTER",
+            "PROFILE_UPDATE",
+            "PASSWORD_CHANGE",
+            "ROLE_CHANGE",
+            "STATUS_CHANGE",
+            "INCIDENT_REPORT",
+            "CCTV_ANALYSIS",
+            "USER_CREATED"
+          ]
+        },
+        "details": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["userId", "userName", "userEmail", "actionType", "details", "createdAt"]
+    },
+    "MonitoringSession": {
+      "title": "MonitoringSession",
+      "description": "Recorded CCTV, manual report, or simulation monitoring analysis summary.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "sourceType": {
+          "type": "string",
+          "enum": ["uploaded_video", "simulation_sample", "manual_report"]
+        },
+        "analysisMode": {
+          "type": "string",
+          "enum": ["real_opencv", "simulated_scenario", "operator_report"]
+        },
+        "totalPeopleDetected": {
+          "type": "integer"
+        },
+        "peakDensity": {
+          "type": "number"
+        },
+        "dangerScore": {
+          "type": "number"
+        },
+        "safetyStatus": {
+          "type": "string",
+          "enum": ["SAFE", "ELEVATED", "HIGH_RISK", "CRITICAL"]
+        },
+        "movementPattern": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "anomalyFlags": {
+          "type": "array",
+          "description": "Up to 10 detected movement anomaly codes."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "title",
+        "sourceType",
+        "analysisMode",
+        "totalPeopleDetected",
+        "peakDensity",
+        "dangerScore",
+        "safetyStatus",
+        "movementPattern",
+        "anomalyFlags",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CrowdAlert": {
+      "title": "CrowdAlert",
+      "description": "Emergency response incident and early warning alert triggered by crowd density, Optical Flow anomalies, or manual operator report.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "sessionId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "location": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "zoneName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "densityLevel": {
+          "type": "string",
+          "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+        },
+        "peoplePerSqm": {
+          "type": "number"
+        },
+        "dangerScore": {
+          "type": "number"
+        },
+        "dangerLevel": {
+          "type": "string",
+          "enum": ["LOW", "MEDIUM", "MODERATE", "HIGH", "CRITICAL"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["new", "active", "acknowledged", "responding", "resolved"]
+        },
+        "assignedTeam": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "actionHistory": {
+          "type": "array",
+          "description": "Up to 20 timestamped incident response audit entries."
+        },
+        "suggestedAction": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "sourceKind": {
+          "type": "string",
+          "enum": ["real_video_analysis", "simulated_prediction", "operator_manual_report"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "sessionId",
+        "location",
+        "zoneName",
+        "densityLevel",
+        "peoplePerSqm",
+        "dangerScore",
+        "dangerLevel",
+        "status",
+        "assignedTeam",
+        "actionHistory",
+        "suggestedAction",
+        "sourceKind",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "GateRecommendation": {
+      "title": "GateRecommendation",
+      "description": "Operator-approved gate control recommendation (never automated).",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "alertId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "gateName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "recommendedAction": {
+          "type": "string",
+          "enum": ["OPEN_RELIEF", "RESTRICT_ENTRY", "REDIRECT_FLOW", "HOLD_CURRENT"]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "projectedDensityDrop": {
+          "type": "number"
+        },
+        "approvalStatus": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected"]
+        },
+        "reviewedBy": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "alertId",
+        "gateName",
+        "recommendedAction",
+        "reason",
+        "projectedDensityDrop",
+        "approvalStatus",
+        "reviewedBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "NotificationItem": {
+      "title": "NotificationItem",
+      "description": "Real-time crowd safety notification persisted for operator review.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+        },
+        "zoneName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "read": {
+          "type": "boolean"
+        },
+        "sourceKind": {
+          "type": "string",
+          "enum": ["real_video_analysis", "simulated_prediction", "system_action"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "title",
+        "message",
+        "severity",
+        "zoneName",
+        "read",
+        "sourceKind",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRegistry" },
+      "description": "Authoritative administrator privilege registry."
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Operator/Admin public profile document without email PII."
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/UserPrivateInfo" },
+      "description": "Operator isolated PII subcollection."
+    },
+    "/activityLogs/{logId}": {
+      "schema": { "$ref": "#/entities/ActivityLog" },
+      "description": "Immutable login, logout, registration, and audit trail."
+    },
+    "/monitoringSessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/MonitoringSession" },
+      "description": "Saved CCTV, manual incident, and simulation monitoring sessions."
+    },
+    "/alerts/{alertId}": {
+      "schema": { "$ref": "#/entities/CrowdAlert" },
+      "description": "Crowd crush emergency response incidents tied to monitoring sessions."
+    },
+    "/gateRecommendations/{recId}": {
+      "schema": { "$ref": "#/entities/GateRecommendation" },
+      "description": "Human-in-the-loop gate action recommendations tied to alerts."
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/NotificationItem" },
+      "description": "Operator real-time safety notifications."
+    }
+  }
+}

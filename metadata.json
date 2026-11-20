@@ -1,0 +1,8 @@
+{
+  "name": "CROWGUARD",
+  "description": "Intelligent Crowd Crush Early Warning and Prevention System powered by Python OpenCV, Optical Flow analysis, and Firebase real-time alerting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

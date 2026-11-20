@@ -1,0 +1,391 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Reusable Hardened Primitives ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedAdminEmail() {
+      return isSignedIn() &&
+        request.auth.token.email == 'varshanv839@gmail.com' &&
+        request.auth.token.email_verified == true;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        isVerifiedAdminEmail() ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isActiveUser() {
+      return isSignedIn() && (
+        isAdmin() ||
+        !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
+        !('status' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active'
+      );
+    }
+
+    // --- Validation Blueprints ---
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'photoURL', 'role', 'status', 'lastLoginAt', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'displayName', 'photoURL', 'role', 'status', 'lastLoginAt', 'createdAt', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+        data.photoURL is string && data.photoURL.size() <= 500 &&
+        data.role in ['operator', 'admin'] &&
+        data.status in ['active', 'inactive'] &&
+        data.lastLoginAt is timestamp &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateInfo(data) {
+      return data.keys().hasAll(['uid', 'email', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 200 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAdminRegistry(data) {
+      return data.keys().hasAll(['uid', 'assignedBy', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'assignedBy', 'createdAt']) &&
+        isValidId(data.uid) &&
+        isValidId(data.assignedBy) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidActivityLog(data) {
+      return data.keys().hasAll(['userId', 'userName', 'userEmail', 'actionType', 'details', 'createdAt']) &&
+        data.keys().hasOnly(['userId', 'userName', 'userEmail', 'actionType', 'details', 'createdAt']) &&
+        isValidId(data.userId) &&
+        data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 100 &&
+        data.userEmail is string && data.userEmail.size() <= 200 &&
+        data.actionType in [
+          'LOGIN', 'LOGOUT', 'REGISTER', 'PROFILE_UPDATE', 'PASSWORD_CHANGE',
+          'ROLE_CHANGE', 'STATUS_CHANGE', 'INCIDENT_REPORT', 'CCTV_ANALYSIS', 'USER_CREATED'
+        ] &&
+        data.details is string && data.details.size() >= 1 && data.details.size() <= 300 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidMonitoringSession(data) {
+      return data.keys().hasAll([
+          'ownerId', 'title', 'sourceType', 'analysisMode',
+          'totalPeopleDetected', 'peakDensity', 'dangerScore',
+          'safetyStatus', 'movementPattern', 'anomalyFlags',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'ownerId', 'title', 'sourceType', 'analysisMode',
+          'totalPeopleDetected', 'peakDensity', 'dangerScore',
+          'safetyStatus', 'movementPattern', 'anomalyFlags',
+          'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.ownerId) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 140 &&
+        data.sourceType in ['uploaded_video', 'simulation_sample', 'manual_report'] &&
+        data.analysisMode in ['real_opencv', 'simulated_scenario', 'operator_report'] &&
+        data.totalPeopleDetected is int && data.totalPeopleDetected >= 0 && data.totalPeopleDetected <= 1000000 &&
+        data.peakDensity is number && data.peakDensity >= 0 && data.peakDensity <= 50 &&
+        data.dangerScore is number && data.dangerScore >= 0 && data.dangerScore <= 100 &&
+        data.safetyStatus in ['SAFE', 'ELEVATED', 'HIGH_RISK', 'CRITICAL'] &&
+        data.movementPattern is string && data.movementPattern.size() >= 1 && data.movementPattern.size() <= 120 &&
+        data.anomalyFlags is list && data.anomalyFlags.size() <= 10 &&
+        (data.anomalyFlags.size() == 0 || (data.anomalyFlags[0] is string && data.anomalyFlags[0].size() <= 64)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCrowdAlert(data) {
+      return data.keys().hasAll([
+          'ownerId', 'sessionId', 'location', 'zoneName',
+          'densityLevel', 'peoplePerSqm', 'dangerScore', 'dangerLevel',
+          'status', 'assignedTeam', 'actionHistory',
+          'suggestedAction', 'sourceKind', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'ownerId', 'sessionId', 'location', 'zoneName',
+          'densityLevel', 'peoplePerSqm', 'dangerScore', 'dangerLevel',
+          'status', 'assignedTeam', 'actionHistory',
+          'suggestedAction', 'sourceKind', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.ownerId) &&
+        isValidId(data.sessionId) &&
+        data.location is string && data.location.size() >= 1 && data.location.size() <= 120 &&
+        data.zoneName is string && data.zoneName.size() >= 1 && data.zoneName.size() <= 80 &&
+        data.densityLevel in ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] &&
+        data.peoplePerSqm is number && data.peoplePerSqm >= 0 && data.peoplePerSqm <= 50 &&
+        data.dangerScore is number && data.dangerScore >= 0 && data.dangerScore <= 100 &&
+        data.dangerLevel in ['LOW', 'MEDIUM', 'MODERATE', 'HIGH', 'CRITICAL'] &&
+        data.status in ['new', 'active', 'acknowledged', 'responding', 'resolved'] &&
+        data.assignedTeam is string && data.assignedTeam.size() >= 1 && data.assignedTeam.size() <= 80 &&
+        data.actionHistory is list && data.actionHistory.size() <= 20 &&
+        (data.actionHistory.size() == 0 || (data.actionHistory[0] is string && data.actionHistory[0].size() <= 220)) &&
+        data.suggestedAction is string && data.suggestedAction.size() >= 1 && data.suggestedAction.size() <= 300 &&
+        data.sourceKind in ['real_video_analysis', 'simulated_prediction', 'operator_manual_report'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidGateRecommendation(data) {
+      return data.keys().hasAll([
+          'ownerId', 'alertId', 'gateName', 'recommendedAction',
+          'reason', 'projectedDensityDrop', 'approvalStatus',
+          'reviewedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'ownerId', 'alertId', 'gateName', 'recommendedAction',
+          'reason', 'projectedDensityDrop', 'approvalStatus',
+          'reviewedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.ownerId) &&
+        isValidId(data.alertId) &&
+        data.gateName is string && data.gateName.size() >= 1 && data.gateName.size() <= 80 &&
+        data.recommendedAction in ['OPEN_RELIEF', 'RESTRICT_ENTRY', 'REDIRECT_FLOW', 'HOLD_CURRENT'] &&
+        data.reason is string && data.reason.size() >= 1 && data.reason.size() <= 300 &&
+        data.projectedDensityDrop is number && data.projectedDensityDrop >= 0 && data.projectedDensityDrop <= 100 &&
+        data.approvalStatus in ['pending', 'approved', 'rejected'] &&
+        data.reviewedBy is string && data.reviewedBy.size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidNotificationItem(data) {
+      return data.keys().hasAll([
+          'ownerId', 'title', 'message', 'severity', 'zoneName',
+          'read', 'sourceKind', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'ownerId', 'title', 'message', 'severity', 'zoneName',
+          'read', 'sourceKind', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.ownerId) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+        data.message is string && data.message.size() >= 1 && data.message.size() <= 300 &&
+        data.severity in ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] &&
+        data.zoneName is string && data.zoneName.size() >= 1 && data.zoneName.size() <= 80 &&
+        data.read is bool &&
+        data.sourceKind in ['real_video_analysis', 'simulated_prediction', 'system_action'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && (isOwner(adminId) || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isValidId(adminId) &&
+        isAdmin() &&
+        isValidAdminRegistry(incoming()) &&
+        incoming().uid == adminId &&
+        incoming().assignedBy == request.auth.uid &&
+        incoming().createdAt == request.time;
+      allow delete: if isValidId(adminId) && isAdmin() && adminId != request.auth.uid;
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(userId) &&
+        isSignedIn() &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == userId &&
+        incoming().lastLoginAt == request.time &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time && (
+          isAdmin() || (
+            userId == request.auth.uid &&
+            incoming().role == 'operator' &&
+            incoming().status == 'active'
+          )
+        );
+      allow update: if isValidId(userId) &&
+        isSignedIn() &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          isAdmin() || (
+            isOwner(userId) &&
+            incoming().role == existing().role &&
+            (!('status' in existing()) || existing().status == 'active') &&
+            incoming().status == 'active' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'status', 'lastLoginAt', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(userId) && isAdmin() && userId != request.auth.uid;
+
+      match /private/{docId} {
+        allow get: if isValidId(userId) && isValidId(docId) && (isOwner(userId) || isAdmin());
+        allow list: if isValidId(userId) && (isOwner(userId) || isAdmin());
+        allow create: if isValidId(userId) && isValidId(docId) &&
+          docId == 'contact' &&
+          isSignedIn() &&
+          isValidUserPrivateInfo(incoming()) &&
+          (isOwner(userId) || isAdmin()) &&
+          incoming().uid == userId &&
+          incoming().updatedAt == request.time;
+        allow update: if isValidId(userId) && isValidId(docId) &&
+          docId == 'contact' &&
+          isSignedIn() &&
+          isValidUserPrivateInfo(incoming()) &&
+          (isOwner(userId) || isAdmin()) &&
+          incoming().uid == existing().uid &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['email', 'updatedAt']);
+        allow delete: if isValidId(userId) && isValidId(docId) && isAdmin();
+      }
+    }
+
+    match /activityLogs/{logId} {
+      allow get: if isValidId(logId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isValidId(logId) &&
+        isSignedIn() &&
+        isValidActivityLog(incoming()) &&
+        (incoming().userId == request.auth.uid || isAdmin()) &&
+        incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    match /monitoringSessions/{sessionId} {
+      allow get: if isValidId(sessionId) && isSignedIn() && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow create: if isValidId(sessionId) &&
+        isActiveUser() &&
+        isValidMonitoringSession(incoming()) &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(sessionId) &&
+        isActiveUser() &&
+        isValidMonitoringSession(incoming()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          isAdmin() || (
+            existing().ownerId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'totalPeopleDetected', 'peakDensity', 'dangerScore',
+              'safetyStatus', 'movementPattern', 'anomalyFlags', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isValidId(sessionId) && isActiveUser() && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    match /alerts/{alertId} {
+      allow get: if isValidId(alertId) && isSignedIn() && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow create: if isValidId(alertId) &&
+        isActiveUser() &&
+        isValidCrowdAlert(incoming()) &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().status in ['new', 'active'] &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/monitoringSessions/$(incoming().sessionId)) &&
+        (
+          get(/databases/$(database)/documents/monitoringSessions/$(incoming().sessionId)).data.ownerId == request.auth.uid ||
+          isAdmin()
+        );
+      allow update: if isValidId(alertId) &&
+        isActiveUser() &&
+        isValidCrowdAlert(incoming()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().sessionId == existing().sessionId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          isAdmin() || (
+            existing().ownerId == request.auth.uid &&
+            existing().status != 'resolved' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'assignedTeam', 'actionHistory', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(alertId) && isActiveUser() && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    match /gateRecommendations/{recId} {
+      allow get: if isValidId(recId) && isSignedIn() && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow create: if isValidId(recId) &&
+        isActiveUser() &&
+        isValidGateRecommendation(incoming()) &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().approvalStatus == 'pending' &&
+        incoming().reviewedBy == '' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/alerts/$(incoming().alertId)) &&
+        (
+          get(/databases/$(database)/documents/alerts/$(incoming().alertId)).data.ownerId == request.auth.uid ||
+          isAdmin()
+        );
+      allow update: if isValidId(recId) &&
+        isActiveUser() &&
+        isValidGateRecommendation(incoming()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().alertId == existing().alertId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          isAdmin() || (
+            existing().ownerId == request.auth.uid &&
+            existing().approvalStatus == 'pending' &&
+            incoming().approvalStatus in ['approved', 'rejected'] &&
+            incoming().reviewedBy == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['approvalStatus', 'reviewedBy', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(recId) && isActiveUser() && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    match /notifications/{notificationId} {
+      allow get: if isValidId(notificationId) && isSignedIn() && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow create: if isValidId(notificationId) &&
+        isActiveUser() &&
+        isValidNotificationItem(incoming()) &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().read == false &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(notificationId) &&
+        isActiveUser() &&
+        isValidNotificationItem(incoming()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          isAdmin() || (
+            existing().ownerId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['read', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(notificationId) && isActiveUser() && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+  }
+}
